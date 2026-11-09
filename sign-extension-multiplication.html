@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign Extension and Signed Multiplication</title>
+  <style>
+    :root { --navy: #003366; --light: #f5f8fc; --line: #c9d6e8; --ok: #0a7d2c; --bad: #b00020; --warn: #b8590a; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; max-width: 900px; margin: 0 auto; padding: 24px 16px 60px; color: #222; background: #fff; line-height: 1.5; }
+    h1 { color: var(--navy); text-align: center; margin-bottom: 4px; }
+    .subtitle { text-align: center; color: #555; margin-top: 0; }
+    h2 { color: var(--navy); border-bottom: 2px solid var(--navy); padding-bottom: 4px; margin-top: 40px; }
+    .card { background: var(--light); border: 1px solid var(--line); border-radius: 8px; padding: 18px; margin-top: 12px; }
+    .row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin-bottom: 10px; }
+    label { font-weight: bold; color: #333; }
+    input, select { font-size: 16px; padding: 6px 8px; border: 1px solid #aab8cc; border-radius: 4px; }
+    input.num { width: 90px; text-align: center; }
+    input.bin { width: 200px; font-family: monospace; font-size: 18px; letter-spacing: 1px; }
+    button { font-size: 15px; padding: 8px 14px; cursor: pointer; background: var(--navy); color: #fff; border: none; border-radius: 4px; }
+    button:hover { opacity: 0.9; }
+    button.secondary { background: #6b7d95; }
+    .mono { font-family: "Courier New", monospace; font-size: 16px; letter-spacing: 1px; white-space: nowrap; }
+    .copied { background: #ffe08a; border-radius: 3px; padding: 0 1px; }
+    .signbit { color: var(--bad); font-weight: bold; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; font-size: 15px; background: #fff; }
+    th, td { border: 1px solid var(--line); padding: 8px; text-align: center; }
+    th { background: #e3ebf7; color: var(--navy); }
+    td.left { text-align: left; }
+    .ok { color: var(--ok); font-weight: bold; }
+    .bad { color: var(--bad); font-weight: bold; }
+    .warn { color: var(--warn); }
+    .note { color: #555; font-size: 14px; margin: 10px 0; }
+    .error { color: var(--bad); font-weight: bold; }
+    .final { font-size: 19px; margin-top: 14px; }
+    .step-title { font-weight: bold; color: var(--navy); margin: 16px 0 4px; }
+    .scroll { overflow-x: auto; }
+  </style>
+</head>
+<body>
+
+<h1>Sign Extension and Signed Multiplication</h1>
+<p class="subtitle">Computer Organization and Architecture - Module 3: Arithmetic Unit</p>
+
+<!-- ================= SECTION 1: SIGN EXTENSION ================= -->
+<h2>1. Sign Extension</h2>
+<p>Sign extension makes a two's complement number wider without changing its value. The sign bit is copied into the new leftmost positions: 0s for positive numbers, 1s for negative numbers.</p>
+
+<div class="card">
+  <div class="row">
+    <label for="se-bin">Binary number:</label>
+    <input class="bin" id="se-bin" value="1011" maxlength="16">
+    <label for="se-width">Extend to:</label>
+    <select id="se-width">
+      <option value="6">6 bits</option>
+      <option value="8" selected>8 bits</option>
+      <option value="12">12 bits</option>
+      <option value="16">16 bits</option>
+    </select>
+  </div>
+  <div class="row">
+    <button onclick="runSignExtension()">Extend</button>
+  </div>
+  <div id="se-output"></div>
+</div>
+
+<!-- ================= SECTION 2: SIGNED MULTIPLICATION ================= -->
+<h2>2. Signed Multiplication (Sign-Extension Method)</h2>
+<p>Both operands are sign-extended to 2n bits. One partial product is formed for each multiplier bit, shifted to its bit position, and all partial products are added. In two's complement the sign bit of the multiplier has negative weight, so its partial product is subtracted.</p>
+
+<div class="card">
+  <div class="row">
+    <label for="mul-n">Operand size (n bits):</label>
+    <select id="mul-n">
+      <option value="4">4</option>
+      <option value="5" selected>5</option>
+      <option value="6">6</option>
+      <option value="8">8</option>
+    </select>
+    <label for="mul-m">Multiplicand M:</label>
+    <input class="num" type="number" id="mul-m" value="-13">
+    <label for="mul-q">Multiplier Q:</label>
+    <input class="num" type="number" id="mul-q" value="11">
+  </div>
+  <div class="row">
+    <button onclick="runMultiplication()">Multiply</button>
+  </div>
+  <div id="mul-output"></div>
+</div>
+
+<script>
+  // ---------- Helpers ----------
+  // Two's complement bit string of a value in a given width
+  function toBits(value, width) {
+    const masked = value & ((1 << width) - 1);
+    return masked.toString(2).padStart(width, "0");
+  }
+
+  // Read a bit string as a signed two's complement number
+  function bitsToSigned(bits) {
+    const width = bits.length;
+    const v = parseInt(bits, 2);
+    return bits[0] === "1" ? v - (1 << width) : v;
+  }
+
+  // Copy the sign bit into the new leftmost positions
+  function signExtend(bits, newWidth) {
+    return bits[0].repeat(newWidth - bits.length) + bits;
+  }
+
+  // Add 0s on the left (wrong for negative numbers, shown for comparison)
+  function zeroExtend(bits, newWidth) {
+    return "0".repeat(newWidth - bits.length) + bits;
+  }
+
+  // Highlight the leftmost `count` bits (the copied sign bits)
+  function highlightCopied(bits, count) {
+    return `<span class="copied">${bits.slice(0, count)}</span>${bits.slice(count)}`;
+  }
+
+  // ---------- Section 1: Sign extension ----------
+  function setSE(bits) {
+    document.getElementById("se-bin").value = bits;
+    runSignExtension();
+  }
+
+  function runSignExtension() {
+    const out = document.getElementById("se-output");
+    const bits = document.getElementById("se-bin").value.trim();
+    const newWidth = parseInt(document.getElementById("se-width").value, 10);
+
+    if (!/^[01]+$/.test(bits)) {
+      out.innerHTML = '<p class="error">Enter a binary number using only 0 and 1.</p>';
+      return;
+    }
+    if (bits.length >= newWidth) {
+      out.innerHTML = '<p class="error">The new width must be larger than the current width.</p>';
+      return;
+    }
+
+    const n = bits.length;
+    const value = bitsToSigned(bits);
+    const extended = signExtend(bits, newWidth);
+    const extendedValue = bitsToSigned(extended);
+    const copiedCount = newWidth - n + 1;   // copied bits + original sign bit
+    const zeroExt = zeroExtend(bits, newWidth);
+    const zeroValue = bitsToSigned(zeroExt);
+    const isNeg = bits[0] === "1";
+
+    out.innerHTML = `
+      <table>
+        <tr><th>Form</th><th>Bits</th><th>Value</th></tr>
+        <tr>
+          <td>Original (${n} bits)</td>
+          <td class="mono"><span class="signbit">${bits[0]}</span>${bits.slice(1)}</td>
+          <td>${value}</td>
+        </tr>
+        <tr>
+          <td>Sign-extended (${newWidth} bits)</td>
+          <td class="mono">${highlightCopied(extended, copiedCount)}</td>
+          <td class="ok">${extendedValue} &nbsp;&#10003; unchanged</td>
+        </tr>
+      </table>
+      <p class="note">The number is ${isNeg ? "negative" : "positive"}, so the sign bit <b>${bits[0]}</b> was copied into the ${newWidth - n} new leftmost positions (highlighted).</p>
+      <p class="warn"><b>Comparison, zero extension:</b>
+        <span class="mono">${zeroExt}</span> = ${zeroValue}
+        ${zeroValue === value
+          ? '<span class="ok">&#10003; same value (only correct because the number is positive)</span>'
+          : '<span class="bad">&#10007; the value changed, so zero extension is wrong for signed numbers</span>'}
+      </p>
+    `;
+  }
+
+  // ---------- Section 2: Signed multiplication ----------
+  function presetMul(m, q, n) {
+    document.getElementById("mul-n").value = n;
+    document.getElementById("mul-m").value = m;
+    document.getElementById("mul-q").value = q;
+    runMultiplication();
+  }
+
+  function runMultiplication() {
+    const out = document.getElementById("mul-output");
+    const n = parseInt(document.getElementById("mul-n").value, 10);
+    const m = parseInt(document.getElementById("mul-m").value, 10);
+    const q = parseInt(document.getElementById("mul-q").value, 10);
+
+    const lo = -(1 << (n - 1));
+    const hi = (1 << (n - 1)) - 1;
+    if (isNaN(m) || isNaN(q) || m < lo || m > hi || q < lo || q > hi) {
+      out.innerHTML = `<p class="error">For ${n}-bit operands, both numbers must be between ${lo} and ${hi}.</p>`;
+      return;
+    }
+
+    const W = 2 * n;                          // product width
+    const mask = (1 << W) - 1;
+
+    // Step 1: operands in n bits, multiplicand sign-extended to 2n bits
+    const mBits = toBits(m, n);
+    const qBits = toBits(q, n);
+    const mExtBits = signExtend(mBits, W);
+    const mExt = bitsToSigned(mExtBits) & mask;
+
+    let html = `
+      <p class="step-title">Step 1: Write both operands in ${n}-bit two's complement and sign-extend the multiplicand to ${W} bits.</p>
+      <div class="scroll">
+      <table>
+        <tr><th>Operand</th><th>Decimal</th><th>${n}-bit form</th><th>Sign-extended (${W} bits)</th></tr>
+        <tr>
+          <td>Multiplicand M</td><td>${m}</td>
+          <td class="mono">${mBits}</td>
+          <td class="mono">${highlightCopied(mExtBits, W - n + 1)}</td>
+        </tr>
+        <tr>
+          <td>Multiplier Q</td><td>${q}</td>
+          <td class="mono">${qBits}</td>
+          <td class="mono">used bit by bit below</td>
+        </tr>
+      </table>
+      </div>
+
+      <p class="step-title">Step 2: Form one partial product for each multiplier bit.</p>
+      <p class="note">If the multiplier bit is 1, add the sign-extended multiplicand shifted left by that bit's position. If the bit is 0, the partial product is all zeros. The leftmost (sign) bit has negative weight, so its partial product is subtracted.</p>
+      <div class="scroll">
+      <table>
+        <tr><th>Bit i</th><th>Multiplier bit</th><th>Action</th><th>Partial product (${W} bits)</th></tr>
+    `;
+
+    let total = 0;
+    for (let i = 0; i < n; i++) {
+      const bit = (q >> i) & 1;               // bit i of the two's complement multiplier
+      const isSign = (i === n - 1);
+      let pp;
+      let action;
+
+      if (bit === 0) {
+        pp = 0;
+        action = "Add zeros";
+      } else if (!isSign) {
+        pp = (mExt << i) & mask;
+        action = `Add M shifted left ${i}`;
+      } else {
+        pp = (-(mExt << i)) & mask;
+        action = `Subtract M shifted left ${i} (sign bit, negative weight)`;
+      }
+
+      total = (total + pp) & mask;
+      html += `<tr>
+        <td>${i}${isSign ? " (sign)" : ""}</td>
+        <td>${bit}</td>
+        <td class="left">${action}</td>
+        <td class="mono">${toBits(pp, W)}</td>
+      </tr>`;
+    }
+
+    html += `<tr>
+        <th colspan="3">Sum of all partial products</th>
+        <th class="mono">${toBits(total, W)}</th>
+      </tr></table></div>`;
+
+    // Step 3: read the result
+    const product = bitsToSigned(toBits(total, W));
+    const expected = m * q;
+    const correct = product === expected;
+
+    html += `
+      <p class="step-title">Step 3: Read the ${W}-bit result as a signed number.</p>
+      <p class="final">
+        ${m} &times; ${q} = <b>${product}</b>
+        &nbsp; ${correct
+          ? '<span class="ok">&#10003; matches ordinary multiplication</span>'
+          : '<span class="bad">&#10007; mismatch (expected ' + expected + ')</span>'}
+      </p>
+      <p class="note">Binary result: <span class="mono">${toBits(total, W)}</span>
+        (${W} bits, enough to hold any product of two ${n}-bit operands)</p>
+    `;
+
+    out.innerHTML = html;
+  }
+
+  // Initial display
+  runSignExtension();
+  runMultiplication();
+</script>
+
+</body>
+</html>
